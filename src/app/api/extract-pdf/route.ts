@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
 
   const ocrForm = new FormData();
   ocrForm.append('apikey', process.env.OCR_SPACE_API_KEY || '');
-  ocrForm.append('language', 'auto'); // Auto-detect (funkar perfekt med Engine 3 för svenska)
+  ocrForm.append('language', 'auto');
   ocrForm.append('OCREngine', '3');
   ocrForm.append('isTable', 'true');
   ocrForm.append('scale', 'true');
@@ -35,16 +35,26 @@ export async function POST(req: NextRequest) {
       throw new Error(ocrData.ErrorMessage?.join(' ') || `OCR-fel (kod: ${ocrData.OCRExitCode})`);
     }
 
-    const fullText = ocrData.ParsedResults.map((r: any) => r.ParsedText).join('\n').toLowerCase();
+    const fullText = ocrData.ParsedResults.map((r: any) => r.ParsedText).join('\n');
 
-    // Förbättrad parsing för svenska fakturor
-    const amount = fullText.match(/(kvar att betala|att betala|totalt|belopp|summa)[\s:]*([\d\s.,]+)[\s]*(kr|sek)/i)?.[2]?.replace(/\s/g, '').replace(',', '.') || 'Ej hittat';
-    const dueDate = fullText.match(/(förfallodatum|förfaller|betala senast)[\s:]*(\d{4}-\d{2}-\d{2}|\d{2}[\/.-]\d{2}[\/.-]\d{4})/i)?.[2] || 'Ej hittat';
-    const supplier = fullText.match(/(leverantör|säljar|from|avsändare)[\s:]*([a-za-zåäö\s\d]+(?:ab|hb|kb|aktiebolag|as|ltd|inc))/i)?.[2]?.trim() || 'Ej hittat';
-    const invoiceNumber = fullText.match(/(fakturanr|faktura nr|fakturanummer|invoice no)[\s:]*([\d]+)/i)?.[2] || 'Ej hittat';
-    const ocrNumber = fullText.match(/(ocr|ocr-nr|ocr nummer)[\s:]*([\d]+)/i)?.[2] || 'Ej hittat';
+    // Mer robust parsing – flera alternativ för varje fält
+    const amountMatch = fullText.match(/(att betala|totalt|summa|belopp|slutsumm a|kvar att betala|totalbelopp)[\s:]*([\d\s.,]+)[\s]*(kr|sek|kronor)/i);
+    const amount = amountMatch ? amountMatch[2].replace(/\s/g, '').replace(',', '.') : 'Ej hittat';
+
+    const dueDateMatch = fullText.match(/(förfallodatum|förfaller|betala senast|due date|betalas senast)[\s:]*(\d{4}-\d{2}-\d{2}|\d{2}[\/.-]\d{2}[\/.-]\d{4})/i);
+    const dueDate = dueDateMatch ? dueDateMatch[2] : 'Ej hittat';
+
+    const supplierMatch = fullText.match(/(leverantör|säljar|från|avsändare|supplier)[\s:]*([a-za-zåäöÅÄÖ\s\d]+(?:ab|hb|kb|aktiebolag|as|ltd|inc|group))/i);
+    const supplier = supplierMatch ? supplierMatch[2].trim() : 'Ej hittat';
+
+    const invoiceNumberMatch = fullText.match(/(fakturanr|faktura nr|fakturanummer|invoice no|invoice number|faktura#)[\s:]*([\d]+)/i);
+    const invoiceNumber = invoiceNumberMatch ? invoiceNumberMatch[2] : 'Ej hittat';
+
+    const ocrNumberMatch = fullText.match(/(ocr|ocr-nr|ocr nummer|plusgiro|bg|bankgiro)[\s:]*([\d\s-]+)/i);
+    const ocrNumber = ocrNumberMatch ? ocrNumberMatch[2].replace(/\s|-/g, '') : 'Ej hittat';
 
     return new Response(JSON.stringify({
+      fullText: fullText.substring(0, 3000) + '...', // För debug – visa råtext
       parsed: {
         amount: amount !== 'Ej hittat' ? `${amount} kr` : 'Ej hittat',
         dueDate,
