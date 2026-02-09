@@ -1,18 +1,39 @@
 "use client";
 
 import { useDropzone } from 'react-dropzone';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+);
 
 export default function Invoices() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [parsed, setParsed] = useState<any>(null);
+  const [result, setResult] = useState<any>(null);
+  const [invoices, setInvoices] = useState<any[]>([]);
+
+  const fetchInvoices = async () => {
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) console.error('Supabase fetch error:', error);
+    else setInvoices(data || []);
+  };
+
+  useEffect(() => {
+    fetchInvoices();
+  }, []);
 
   const onDrop = async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) return;
     setLoading(true);
     setError(null);
-    setParsed(null);
+    setResult(null);
 
     const formData = new FormData();
     formData.append('file', acceptedFiles[0]);
@@ -20,8 +41,9 @@ export default function Invoices() {
     try {
       const res = await fetch('/api/extract-pdf', { method: 'POST', body: formData });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setParsed(data.parsed);
+      if (!res.ok) throw new Error(data.error || 'OCR misslyckades');
+      setResult(data);
+      fetchInvoices(); // Uppdatera lista efter sparning
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -49,20 +71,38 @@ export default function Invoices() {
         {loading && <p className="text-center text-primary mt-6">Bearbetar med OCR...</p>}
         {error && <p className="text-red-600 text-center mt-6">{error}</p>}
 
-        {parsed && (
+        {result && (
           <div className="mt-8 bg-green-50 dark:bg-green-900/20 rounded-xl p-6">
             <h3 className="font-bold mb-4">Extraherad data</h3>
-            <p><strong>Belopp:</strong> {parsed.amount}</p>
-            <p><strong>Förfallodatum:</strong> {parsed.dueDate}</p>
-            <p><strong>Leverantör:</strong> {parsed.supplier}</p>
-            <p><strong>Fakturanummer:</strong> {parsed.invoiceNumber}</p>
-            <p><strong>OCR-nummer:</strong> {parsed.ocrNumber}</p>
-            <button className="mt-6 w-full bg-primary text-white py-3 rounded-lg">Godkänn & finansiera</button>
+            <p><strong>Belopp:</strong> {result.parsed.amount}</p>
+            <p><strong>Förfallodatum:</strong> {result.parsed.dueDate}</p>
+            <p><strong>Leverantör:</strong> {result.parsed.supplier}</p>
+            <p><strong>Fakturanummer:</strong> {result.parsed.invoiceNumber}</p>
+            <p><strong>OCR-nummer:</strong> {result.parsed.ocrNumber}</p>
+            <p className="mt-4 text-green-600 font-medium">{result.message || 'Faktura bearbetad!'}</p>
           </div>
         )}
       </div>
 
-      {/* Här kan du lägga till lista med tidigare fakturor senare */}
+      <h3 className="text-xl font-bold mb-6">Sparade fakturor</h3>
+      {invoices.length === 0 ? (
+        <p className="text-gray-500">Inga fakturor sparade än.</p>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {invoices.map((inv) => (
+            <div key={inv.id} className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+              <p><strong>Belopp:</strong> {inv.parsed_data.amount}</p>
+              <p><strong>Förfallodatum:</strong> {inv.parsed_data.dueDate}</p>
+              <p><strong>Leverantör:</strong> {inv.parsed_data.supplier}</p>
+              <p><strong>Fakturanummer:</strong> {inv.parsed_data.invoiceNumber}</p>
+              <p><strong>OCR-nummer:</strong> {inv.parsed_data.ocrNumber}</p>
+              <a href={inv.pdf_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block bg-primary text-white px-4 py-2 rounded-lg">
+                Öppna PDF
+              </a>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
