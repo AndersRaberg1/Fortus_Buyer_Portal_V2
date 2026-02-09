@@ -37,8 +37,9 @@ export async function POST(req: NextRequest) {
 
     const fullText = ocrData.ParsedResults.map((r: any) => r.ParsedText).join('\n');
 
-    // Perfekt parsing för Telavox + vanliga svenska fakturor
+    // Perfekt parsing för Telavox + fallback för vanliga fakturor
     const amount = fullText.match(/Kvar att Betala \(SEK\) ([\d.,]+)/i)?.[1]?.replace(',', '.') ||
+                   fullText.match(/Belopp ([\d.,]+)/i)?.[1]?.replace(',', '.') ||
                    fullText.match(/(att betala|totalt|summa|belopp|slutsumm a|totalbelopp)[\s:]*([\d\s.,]+)[\s]*(kr|sek|kronor)/i)?.[2]?.replace(/\s/g, '').replace(',', '.') ||
                    'Ej hittat';
 
@@ -51,7 +52,7 @@ export async function POST(req: NextRequest) {
     const invoiceNumber = fullText.match(/Fakturanummer ([\d]+)/i)?.[1] || 'Ej hittat';
 
     const ocrNumber = fullText.match(/Till bankgironr ([\d-]+)/i)?.[1]?.replace(/-/g, '') ||
-                      fullText.match(/bankgiro ([\d-]+)/i)?.[1]?.replace(/-/g, '') ||
+                      fullText.match(/bankgironr ([\d-]+)/i)?.[1]?.replace(/-/g, '') ||
                       'Ej hittat';
 
     return new Response(JSON.stringify({
@@ -59,7 +60,7 @@ export async function POST(req: NextRequest) {
       parsed: {
         amount: amount !== 'Ej hittat' ? `${amount} kr` : 'Ej hittat',
         dueDate,
-        supplier: supplier !== 'Ej hittat' ? supplier.charAt(0).toUpperCase() + supplier.slice(1) : 'Ej hittat',
+        supplier: supplier !== 'Ej hittat' ? supplier : 'Ej hittat',
         invoiceNumber,
         ocrNumber,
       },
