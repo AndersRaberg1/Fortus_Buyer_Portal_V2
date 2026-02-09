@@ -37,24 +37,25 @@ export async function POST(req: NextRequest) {
 
     const fullText = ocrData.ParsedResults.map((r: any) => r.ParsedText).join('\n');
 
-    // Ultimat parsing för Telavox + vanliga svenska fakturor
-    const amountMatch = fullText.match(/(kvar att betala|att betala|totalt|summa|belopp|slutsumm a|totalbelopp|summa \(sek\)|kvar att betala \(sek\))[\s:]*([\d\s.,]+)[\s]*(kr|sek|kronor|\(inkl\. moms\))/i);
-    const amount = amountMatch ? amountMatch[2].replace(/\s/g, '').replace(',', '.') : 'Ej hittat';
+    // Perfekt parsing för Telavox + vanliga svenska fakturor
+    const amount = fullText.match(/Kvar att Betala \(SEK\) ([\d.,]+)/i)?.[1]?.replace(',', '.') ||
+                   fullText.match(/(att betala|totalt|summa|belopp|slutsumm a|totalbelopp)[\s:]*([\d\s.,]+)[\s]*(kr|sek|kronor)/i)?.[2]?.replace(/\s/g, '').replace(',', '.') ||
+                   'Ej hittat';
 
-    const dueDateMatch = fullText.match(/(förfallodatum|förfaller|betala senast|due date|betalas senast)[\s:]*(\d{4}-\d{2}-\d{2}|\d{2}[\/.-]\d{2}[\/.-]\d{4})/i);
-    const dueDate = dueDateMatch ? dueDateMatch[2] : 'Ej hittat';
+    const dueDate = fullText.match(/Förfallodatum ([\d-]{10})/i)?.[1] || 'Ej hittat';
 
-    const supplierMatch = fullText.match(/(betalningsmottagare|leverantör|säljar|från|avsändare|supplier)[\s:]*([a-za-zåäöÅÄÖ\s\d]+(?:ab|hb|kb|aktiebolag|as|ltd|inc|group))/i);
-    const supplier = supplierMatch ? supplierMatch[2].trim() : 'Ej hittat';
+    const supplier = fullText.match(/Betalningsmottagare (Telavox AB)/i)?.[1] ||
+                     fullText.match(/(leverantör|säljar|från|avsändare)[\s:]*([a-za-zåäöÅÄÖ\s\d]+(?:ab|hb|kb|aktiebolag))/i)?.[2]?.trim() ||
+                     'Ej hittat';
 
-    const invoiceNumberMatch = fullText.match(/(fakturanummer|faktura nr|fakturanr|invoice no|invoice number|faktura#|faktura)[\s:]*([\d]+)/i);
-    const invoiceNumber = invoiceNumberMatch ? invoiceNumberMatch[2] : 'Ej hittat';
+    const invoiceNumber = fullText.match(/Fakturanummer ([\d]+)/i)?.[1] || 'Ej hittat';
 
-    const ocrNumberMatch = fullText.match(/(bankgiro|bg|plusgiro|ocr|ocr-nr|ocr nummer|bankgironr|till bankgironr)[\s:]*([\d\s-#]+)/i);
-    const ocrNumber = ocrNumberMatch ? ocrNumberMatch[2].replace(/\s|-|#|/g, '') : 'Ej hittat';
+    const ocrNumber = fullText.match(/Till bankgironr ([\d-]+)/i)?.[1]?.replace(/-/g, '') ||
+                      fullText.match(/bankgiro ([\d-]+)/i)?.[1]?.replace(/-/g, '') ||
+                      'Ej hittat';
 
     return new Response(JSON.stringify({
-      fullText: fullText.substring(0, 3000) + '...', // Debug: Visa rå OCR-text
+      fullText: fullText.substring(0, 3000) + '...', // Debug: visa rå OCR-text
       parsed: {
         amount: amount !== 'Ej hittat' ? `${amount} kr` : 'Ej hittat',
         dueDate,
