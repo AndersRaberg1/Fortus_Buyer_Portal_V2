@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import CreditCard from '@/components/CreditCard';
 import CashFlowChart from '@/components/CashFlowChart';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -12,17 +12,14 @@ const supabase = createClient(
 );
 
 export default function Dashboard() {
-  const [totalDue, setTotalDue] = useState(0);
-  const [invoiceCount, setInvoiceCount] = useState(0);
-  const router = useRouter();
+  const [summary, setSummary] = useState({ count: 0, total: 0 });
 
   useEffect(() => {
     const fetchSummary = async () => {
       const { data } = await supabase.from('invoices').select('amount');
       if (data) {
-        const sum = data.reduce((acc, inv) => acc + parseFloat(inv.amount.replace(' kr', '') || 0), 0);
-        setTotalDue(sum);
-        setInvoiceCount(data.length);
+        const total = data.reduce((acc, inv) => acc + parseFloat(inv.amount.replace(' kr', '') || 0), 0);
+        setSummary({ count: data.length, total });
       }
     };
     fetchSummary();
@@ -32,22 +29,26 @@ export default function Dashboard() {
     <div className="p-8">
       <h1 className="text-3xl font-bold mb-8">Välkommen till Fortus Buyer Portal</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
         <CreditCard />
         <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
-          <h2 className="text-xl font-semibold mb-4">Sammanfattning</h2>
-          <p><strong>Antal fakturor:</strong> {invoiceCount}</p>
-          <p><strong>Totalt att betala:</strong> {totalDue.toFixed(2)} kr</p>
-          <button onClick={() => router.push('/invoices')} className="mt-6 bg-blue-600 text-white px-6 py-3 rounded">
-            Ladda upp eller hantera fakturor
-          </button>
+          <h2 className="text-xl font-semibold mb-4">Fakturaöversikt</h2>
+          <p><strong>Antal fakturor:</strong> {summary.count}</p>
+          <p><strong>Totalt att betala:</strong> {summary.total.toFixed(2)} kr</p>
+          <Link href="/invoices" className="mt-6 inline-block bg-blue-600 text-white px-6 py-3 rounded">
+            Hantera fakturor
+          </Link>
+        </div>
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
+          <h2 className="text-xl font-semibold mb-4">FortusFlex</h2>
+          <p>Förläng betalningstid mot avgift</p>
+          <Link href="/fortusflex" className="mt-6 inline-block bg-green-600 text-white px-6 py-3 rounded">
+            Beräkna förlängning
+          </Link>
         </div>
       </div>
 
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow p-6">
-        <h2 className="text-xl font-semibold mb-4">Cash flow (placeholder)</h2>
-        <CashFlowChart />
-      </div>
+      <CashFlowChart />
     </div>
   );
 }

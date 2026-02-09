@@ -1,8 +1,8 @@
 (globalThis.TURBOPACK_CHUNK_LISTS || (globalThis.TURBOPACK_CHUNK_LISTS = [])).push({
     script: typeof document === "object" ? document.currentScript : undefined,
     chunks: [
-  "static/chunks/[root-of-the-server]__31345837._.css",
-  "static/chunks/buyer-portal-mockup_9e8b4b55._.js"
+  "static/chunks/buyer-portal-mockup_src_app_globals_d4900d0b.css",
+  "static/chunks/buyer-portal-mockup_189b2839._.js"
 ],
     source: "dynamic"
 });

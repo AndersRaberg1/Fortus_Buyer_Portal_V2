@@ -14,25 +14,25 @@ export default function FortusFlex() {
   const [extensionDays, setExtensionDays] = useState(30);
 
   useEffect(() => {
-    const fetchInvoices = async () => {
+    const fetch = async () => {
       const { data } = await supabase.from('invoices').select('*');
       setInvoices(data || []);
     };
-    fetchInvoices();
+    fetch();
   }, []);
 
-  const calculateFee = () => {
-    if (!selectedInvoice || selectedInvoice.amount === 'Ej hittat') return { fee: 0, total: 0, newDueDate: '' };
+  const calculate = () => {
+    if (!selectedInvoice) return { fee: 0, total: 0, newDueDate: '' };
 
     const amount = parseFloat(selectedInvoice.amount.replace(' kr', ''));
-    const feeRate = 0.015; // 1.5% per 30 dagar
+    const feeRate = 0.015;
     const periods = Math.ceil(extensionDays / 30);
     const fee = amount * feeRate * periods;
     const total = amount + fee;
 
-    const originalDue = new Date(selectedInvoice.due_date);
-    const newDue = new Date(originalDue);
-    newDue.setDate(originalDue.getDate() + extensionDays);
+    const original = new Date(selectedInvoice.due_date);
+    const newDue = new Date(original);
+    newDue.setDate(original.getDate() + extensionDays);
 
     return {
       fee: fee.toFixed(2),
@@ -41,51 +41,59 @@ export default function FortusFlex() {
     };
   };
 
-  const { fee, total, newDueDate } = calculateFee();
+  const { fee, total, newDueDate } = calculate();
 
   return (
-    <div className="p-8">
-      <h1 className="text-3xl font-bold mb-8">FortusFlex – Förläng betalningstid</h1>
+    <div className="max-w-4xl mx-auto">
+      <h1 className="text-3xl font-bold mb-8 text-blue-600">FortusFlex – Förläng betalningstid</h1>
 
-      <h2 className="text-2xl mb-4">Välj faktura</h2>
-      <select onChange={(e) => setSelectedInvoice(invoices.find(inv => inv.id === e.target.value))} className="w-full p-3 border rounded mb-8">
-        <option value="">Välj en faktura</option>
-        {invoices.map(inv => (
-          <option key={inv.id} value={inv.id}>
-            {inv.invoice_number} – {inv.amount} (förfaller {inv.due_date})
-          </option>
-        ))}
-      </select>
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 mb-8">
+        <h2 className="text-2xl font-semibold mb-6">Välj faktura för kalkyl</h2>
+        <select onChange={(e) => setSelectedInvoice(invoices.find(i => i.id === e.target.value))} className="w-full p-4 border rounded-xl dark:bg-gray-700 focus:ring-2 focus:ring-blue-500">
+          <option value="">Välj en faktura</option>
+          {invoices.map(inv => (
+            <option key={inv.id} value={inv.id}>
+              {inv.invoice_number} – {inv.amount} (förfaller {inv.due_date})
+            </option>
+          ))}
+        </select>
+      </div>
 
       {selectedInvoice && (
-        <div className="bg-blue-50 dark:bg-blue-900 rounded-xl p-8">
-          <p><strong>Belopp:</strong> {selectedInvoice.amount}</p>
-          <p><strong>Aktuellt förfallodatum:</strong> {selectedInvoice.due_date}</p>
-
-          <label className="block mt-6">
-            <span className="text-lg">Förlängning (dagar):</span>
-            <input type="range" min="15" max="90" step="15" value={extensionDays} onChange={(e) => setExtensionDays(Number(e.target.value))} className="w-full mt-2" />
-            <span className="block text-center text-xl mt-2">{extensionDays} dagar</span>
-          </label>
-
-          <div className="mt-8 grid grid-cols-3 gap-4 text-center">
-            <div className="bg-white dark:bg-gray-800 p-4 rounded">
-              <p className="text-sm">Avgift</p>
-              <p className="text-2xl font-bold">{fee} kr</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded">
-              <p className="text-sm">Total kostnad</p>
-              <p className="text-2xl font-bold">{total} kr</p>
-            </div>
-            <div className="bg-white dark:bg-gray-800 p-4 rounded">
-              <p className="text-sm">Nytt förfallodatum</p>
-              <p className="text-2xl font-bold">{newDueDate}</p>
+        <div className="bg-gradient-to-r from-blue-50 to-green-50 dark:from-blue-900 dark:to-green-900 rounded-2xl shadow-xl p-10">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-10">
+            <div>
+              <p className="text-lg"><strong>Belopp:</strong> {selectedInvoice.amount}</p>
+              <p className="text-lg"><strong>Aktuellt förfallodatum:</strong> {selectedInvoice.due_date}</p>
             </div>
           </div>
 
-          <button className="mt-8 bg-green-600 text-white px-8 py-4 rounded text-lg">
-            Signera med BankID (mock)
-          </button>
+          <label className="block mb-10">
+            <span className="text-xl font-medium mb-4 block">Förlängning (dagar):</span>
+            <input type="range" min="15" max="90" step="15" value={extensionDays} onChange={(e) => setExtensionDays(Number(e.target.value))} className="w-full h-4 bg-gray-300 rounded-lg appearance-none cursor-pointer" />
+            <span className="block text-center text-3xl font-bold mt-4 text-blue-600">{extensionDays} dagar</span>
+          </label>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 text-center">
+              <p className="text-lg text-gray-600">Avgift</p>
+              <p className="text-4xl font-bold text-red-600">{fee} kr</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 text-center">
+              <p className="text-lg text-gray-600">Total kostnad</p>
+              <p className="text-4xl font-bold text-orange-600">{total} kr</p>
+            </div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg p-6 text-center">
+              <p className="text-lg text-gray-600">Nytt förfallodatum</p>
+              <p className="text-4xl font-bold text-green-600">{newDueDate}</p>
+            </div>
+          </div>
+
+          <div className="text-center mt-10">
+            <button className="bg-green-600 text-white text-xl px-12 py-5 rounded-xl hover:bg-green-700 transition shadow-lg">
+              Signera med BankID (mock)
+            </button>
+          </div>
         </div>
       )}
     </div>
