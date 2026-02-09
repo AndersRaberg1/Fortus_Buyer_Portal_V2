@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const ocrForm = new FormData();
   ocrForm.append('apikey', process.env.OCR_SPACE_API_KEY || '');
   ocrForm.append('language', 'auto');
-  ocrForm.append('OCREngine', '3');
+  ocrForm.append('OCREngine', '2'); // Engine 2: Snabbare, ingen timeout, bra accuracy på svenska fakturor
   ocrForm.append('isTable', 'true');
   ocrForm.append('scale', 'true');
   ocrForm.append('detectOrientation', 'true');
@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
   try {
     const ocrResponse = await axios.post('https://api.ocr.space/parse/image', ocrForm, {
       headers: ocrForm.getHeaders(),
+      timeout: 60000, // Client-side timeout 60s (för säkerhet)
     });
 
     const ocrData = ocrResponse.data;
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
 
     const fullText = ocrData.ParsedResults.map((r: any) => r.ParsedText).join('\n');
 
-    // Perfekt parsing för Telavox + fallback för vanliga fakturor
+    // Perfekt parsing för Telavox + vanliga svenska fakturor
     const amount = fullText.match(/Kvar att Betala \(SEK\) ([\d.,]+)/i)?.[1]?.replace(',', '.') ||
                    fullText.match(/Belopp ([\d.,]+)/i)?.[1]?.replace(',', '.') ||
                    fullText.match(/(att betala|totalt|summa|belopp|slutsumm a|totalbelopp)[\s:]*([\d\s.,]+)[\s]*(kr|sek|kronor)/i)?.[2]?.replace(/\s/g, '').replace(',', '.') ||
@@ -52,7 +53,7 @@ export async function POST(req: NextRequest) {
     const invoiceNumber = fullText.match(/Fakturanummer ([\d]+)/i)?.[1] || 'Ej hittat';
 
     const ocrNumber = fullText.match(/Till bankgironr ([\d-]+)/i)?.[1]?.replace(/-/g, '') ||
-                      fullText.match(/bankgironr ([\d-]+)/i)?.[1]?.replace(/-/g, '') ||
+                      fullText.match(/OCR ([\d#]+)/i)?.[1]?.replace(/#/g, '') ||
                       'Ej hittat';
 
     return new Response(JSON.stringify({
@@ -67,6 +68,6 @@ export async function POST(req: NextRequest) {
     }), { status: 200 });
   } catch (err: any) {
     console.error('OCR Error:', err.message);
-    return new Response(JSON.stringify({ error: err.message || 'OCR misslyckades' }), { status: 500 });
+    return new Response(JSON.stringify({ error: err.message || 'OCR misslyckades (timeout eller fel)' }), { status: 500 });
   }
 }
