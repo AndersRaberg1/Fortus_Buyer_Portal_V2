@@ -47,16 +47,16 @@ export async function POST(request: Request) {
     let ocrNumber = 'Ej hittat';
     let bankgiro = 'Ej hittat';
 
-    // Belopp – flexibel för din nya layout
+    // Belopp
     const amountMatch = fullText.match(/(?:Summa|Kvar att Betala)[\s\S]*?\(SEK\)\s*([\d\s,]+)(?:\.\d+)?/i);
     if (amountMatch) {
       amount = amountMatch[1].trim().replace(/\s/g, '').replace(',', '.') + ' kr';
     }
 
-    // Förfallodatum – prioriterar avi ("Förfallodatum 2026-02-26"), undviker period
-    const dueAviMatch = fullText.match(/Förfallodatum[\s\S]*?([\d]{4}-[\d]{2}-[\d]{2})/i);
-    if (dueAviMatch && !fullText.match(new RegExp(dueAviMatch[1] + '.*period', 'i'))) {
-      dueDate = dueAviMatch[1];
+    // Förfallodatum – tar SIST A förekomsten (avi-delen i botten)
+    const dueMatches = [...fullText.matchAll(/Förfallodatum[\s\S]*?([\d]{4}-[\d]{2}-[\d]{2})/gi)];
+    if (dueMatches.length > 0) {
+      dueDate = dueMatches[dueMatches.length - 1][1]; // Sista matchen = avi
     }
 
     // Fakturanummer
@@ -67,8 +67,8 @@ export async function POST(request: Request) {
     const bgMatch = fullText.match(/(\d{4}-\d{4})/g);
     if (bgMatch) bankgiro = bgMatch[0];
 
-    // OCR-nummer – exakt för din bottensträng
-    const ocrLongMatch = fullText.match(/(\d{10,})\s*#\s*[\d\s]+\s*3\s*>\s*\d{8}/i);
+    // OCR-nummer
+    const ocrLongMatch = fullText.match(/(\d{10,})\s*#\s*[\d\s]+\s*3\s*>\s*\d{8}#\d{2}/i);
     if (ocrLongMatch) {
       ocrNumber = ocrLongMatch[1];
       if (invoiceNumber === 'Ej hittat') invoiceNumber = ocrLongMatch[1];
@@ -92,11 +92,10 @@ export async function POST(request: Request) {
 
     const { data: { publicUrl: pdfUrl } } = supabase.storage.from('invoices').getPublicUrl(fileName);
 
-    // Upsert i DB (uppdaterar om invoice_number finns, annars insert)
     const { error: dbError } = await supabase
       .from('invoices')
       .upsert({
-        invoice_number: parsed.invoiceNumber, // Unique key
+        invoice_number: parsed.invoiceNumber === 'Ej hittat' ? null : parsed.invoiceNumber,
         amount: parsed.amount,
         due_date: parsed.dueDate,
         supplier: parsed.supplier,
