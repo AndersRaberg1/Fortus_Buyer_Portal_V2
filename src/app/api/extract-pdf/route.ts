@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     }
 
     const fullText = ocrData.ParsedResults.map((r: any) => r.ParsedText).join('\n');
+    const lines = fullText.split('\n');
 
     let amount = 'Ej hittat';
     let dueDate = 'Ej hittat';
@@ -47,31 +48,52 @@ export async function POST(request: Request) {
     let ocrNumber = 'Ej hittat';
     let bankgiro = 'Ej hittat';
 
-    // Belopp
-    const amountMatch = fullText.match(/(?:Summa|Kvar att Betala)[\s\S]*?\(SEK\)\s*([\d\s,]+)(?:\.\d+)?/i);
-    if (amountMatch) {
-      amount = amountMatch[1].trim().replace(/\s/g, '').replace(',', '.') + ' kr';
-    }
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      const lowerLine = line.toLowerCase();
 
-    // Förfallodatum – tar SIST A förekomsten (avi-delen i botten)
-    const dueMatches = [...fullText.matchAll(/Förfallodatum[\s\S]*?([\d]{4}-[\d]{2}-[\d]{2})/gi)];
-    if (dueMatches.length > 0) {
-      dueDate = dueMatches[dueMatches.length - 1][1]; // Sista matchen = avi
-    }
+      // Belopp – fångar "Summa (SEK)" eller "Kvar att Betala (SEK)" med (inkl. moms)
+      if (lowerLine.includes('summa (sek)') || lowerLine.includes('kvar att betala (sek)')) {
+        const match = line.match(/([\d\s,]+)(?:,\d+)?\s*\(inkl\. moms\)/i);
+        if (match) {
+          amount = match[1].trim().replace(/\s/g, '').replace(',', '.') + ' kr';
+        }
+      }
 
-    // Fakturanummer
-    const invoiceMatch = fullText.match(/Fakturanummer[\s\S]*?(\d{10,})/i);
-    if (invoiceMatch) invoiceNumber = invoiceMatch[1];
+      // Förfallodatum – sista förekomsten (avi i botten)
+      if (lowerLine.includes('förfallodatum')) {
+        const match = line.match(/([\d]{4}-[\d]{2}-[\d]{2})/);
+        if (match) {
+          dueDate = match[1];
+        }
+      }
 
-    // Bankgiro
-    const bgMatch = fullText.match(/(\d{4}-\d{4})/g);
-    if (bgMatch) bankgiro = bgMatch[0];
+      // Fakturanummer
+      if (lowerLine.includes('fakturanummer')) {
+        const match = line.match(/(\d{10,})/);
+        if (match) {
+          invoiceNumber = match[1];
+        }
+      }
 
-    // OCR-nummer
-    const ocrLongMatch = fullText.match(/(\d{10,})\s*#\s*[\d\s]+\s*3\s*>\s*\d{8}#\d{2}/i);
-    if (ocrLongMatch) {
-      ocrNumber = ocrLongMatch[1];
-      if (invoiceNumber === 'Ej hittat') invoiceNumber = ocrLongMatch[1];
+      // Bankgiro
+      if (lowerLine.includes('bankgiro')) {
+        const match = line.match(/(\d{4}-\d{4})/);
+        if (match) {
+          bankgiro = match[1];
+        }
+      }
+
+      // OCR-nummer – bottenraden med # och >
+      if (line.includes('#') && line.includes('>')) {
+        const match = line.match(/(\d{10,})/);
+        if (match) {
+          ocrNumber = match[1];
+          if (invoiceNumber === 'Ej hittat') {
+            invoiceNumber = ocrNumber;
+          }
+        }
+      }
     }
 
     const parsed = {
