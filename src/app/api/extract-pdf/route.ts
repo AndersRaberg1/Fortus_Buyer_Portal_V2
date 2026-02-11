@@ -23,21 +23,30 @@ export async function POST(request: Request) {
     const results = [];
 
     for (const file of files) {
+      console.log(`Bearbetar fil: ${file.name} (${file.size} bytes, type: ${file.type})`);
+
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      // OCR Space – stödjer både PDF och bild
+      // OCR Space
       const ocrForm = new FormData();
       ocrForm.append('file', buffer, file.name);
       ocrForm.append('apikey', process.env.OCR_SPACE_API_KEY || 'helloworld');
       ocrForm.append('language', 'swe');
       ocrForm.append('OCREngine', '2');
 
-      const ocrResponse = await axios.post('https://api.ocr.space/parse/image', ocrForm, {
-        headers: ocrForm.getHeaders(),
-        timeout: 90000,
-      });
-
-      const ocrData = ocrResponse.data;
+      let ocrData;
+      try {
+        const ocrResponse = await axios.post('https://api.ocr.space/parse/image', ocrForm, {
+          headers: ocrForm.getHeaders(),
+          timeout: 90000,
+        });
+        ocrData = ocrResponse.data;
+        console.log('OCR Space response:', JSON.stringify(ocrData));
+      } catch (ocrErr: any) {
+        console.error('OCR Space fel:', ocrErr.message);
+        results.push({ error: `OCR fel: ${ocrErr.message}`, file: file.name });
+        continue;
+      }
 
       if (ocrData.IsErroredOnProcessing) {
         results.push({ error: ocrData.ErrorMessage?.join(' ') || 'OCR misslyckades', file: file.name });
@@ -45,16 +54,16 @@ export async function POST(request: Request) {
       }
 
       const fullText = ocrData.ParsedResults?.map((r: any) => r.ParsedText).join('\n') || '';
-
       if (!fullText.trim()) {
         results.push({ error: 'Ingen text extraherad', file: file.name });
         continue;
       }
 
-      // Groq Llama 3.3 70B Versatile för smart parsing
-      let parsed: any = {}; // Typ 'any' för att undvika TS-fel på dynamiska fält
+      // Groq parsing
+      let parsed: any = {};
+      let completion: any; // Deklarera utanför try för scope i catch
       try {
-        const completion = await groq.chat.completions.create({
+        completion = await groq.chat.completions.create({
           messages: [
             {
               role: 'user',
@@ -66,8 +75,10 @@ export async function POST(request: Request) {
           max_tokens: 1024,
         });
         parsed = JSON.parse(completion.choices[0]?.message?.content || '{}');
+        console.log('Groq parsed:', parsed);
       } catch (e: any) {
-        parsed = { error: 'JSON-parse misslyckades', raw: completion.choices[0]?.message?.content };
+        console.error('Groq fel:', e.message);
+        parsed = { error: 'JSON-parse misslyckades', raw: completion?.choices[0]?.message?.content || 'Ingen raw' };
       }
 
       // Storage upload
