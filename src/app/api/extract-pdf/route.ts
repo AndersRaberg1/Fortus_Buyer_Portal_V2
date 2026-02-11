@@ -27,11 +27,11 @@ export async function POST(request: Request) {
 
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      // OCR Space
+      // OCR Space – auto-detect language (fixar invalid language error)
       const ocrForm = new FormData();
       ocrForm.append('file', buffer, file.name);
-      ocrForm.append('apikey', process.env.OCR_SPACE_API_KEY || 'helloworld');
-      ocrForm.append('language', 'swe');
+      ocrForm.append('apikey', process.env.OCR_SPACE773_API_KEY || 'helloworld');
+      ocrForm.append('language', 'auto'); // Auto-detect (funkar med Engine 2)
       ocrForm.append('OCREngine', '2');
 
       let ocrData;
@@ -61,13 +61,13 @@ export async function POST(request: Request) {
 
       // Groq parsing
       let parsed: any = {};
-      let completion: any; // Deklarera utanför try för scope i catch
+      let completion: any;
       try {
         completion = await groq.chat.completions.create({
           messages: [
             {
               role: 'user',
-              content: `Extrahera exakt från denna Telavox-faktura som JSON: invoice_number, due_date (YYYY-MM-DD), total_amount, supplier, ocr_number, bankgiro, line_items (array med description och amount). Text: ${fullText.substring(0, 12000)}`,
+              content: `Extrahera exakt från denna Telavox-faktura som JSON: invoice_number, due_date (YYYY-MM-DD), total_amount, supplier, ocr_number, bankgiro, line_items (array med description och amount).text: ${fullText.substring(0, 12000)}`,
             },
           ],
           model: 'llama-3.3-70b-versatile',
