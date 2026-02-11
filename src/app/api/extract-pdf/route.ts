@@ -76,8 +76,13 @@ export async function POST(request: Request) {
         });
         let rawContent = completion.choices[0]?.message?.content || '{}';
         console.log('Groq raw response:', rawContent);
-        // Trimma eventuell markdown code block
-        rawContent = rawContent.replace(/^```json
+
+        // Säker trim av eventuell markdown code block (inga regex – undviker syntax-fel)
+        rawContent = rawContent.trim();
+        if (rawContent.startsWith('```json')) rawContent = rawContent.slice(7).trimStart();
+        if (rawContent.startsWith('```')) rawContent = rawContent.slice(3).trimStart();
+        if (rawContent.endsWith('```')) rawContent = rawContent.slice(0, -3).trimEnd();
+
         parsed = JSON.parse(rawContent);
         console.log('Groq parsed:', parsed);
       } catch (e: any) {
@@ -112,7 +117,6 @@ export async function POST(request: Request) {
         ocr_number: parsed.ocr_number?.toString(),
         bankgiro: parsed.bankgiro?.toString(),
         pdf_url: parsed.pdf_url,
-        full_parsed_data: parsed,
       });
 
       if (dbError) console.error('DB error:', dbError);
