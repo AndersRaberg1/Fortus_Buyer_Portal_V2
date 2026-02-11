@@ -23,30 +23,21 @@ export async function POST(request: Request) {
     const results = [];
 
     for (const file of files) {
-      console.log(`Bearbetar fil: ${file.name} (${file.size} bytes, type: ${file.type})`);
-
       const buffer = Buffer.from(await file.arrayBuffer());
 
-      // OCR Space
+      // OCR Space – stödjer både PDF och bild
       const ocrForm = new FormData();
       ocrForm.append('file', buffer, file.name);
-      ocrForm.append('apikey', process.env.OCR_SPACE_API_KEY || 'helloworld'); // Fallback för test
+      ocrForm.append('apikey', process.env.OCR_SPACE_API_KEY || 'helloworld');
       ocrForm.append('language', 'swe');
       ocrForm.append('OCREngine', '2');
 
-      let ocrData;
-      try {
-        const ocrResponse = await axios.post('https://api.ocr.space/parse/image', ocrForm, {
-          headers: ocrForm.getHeaders(),
-          timeout: 90000, // Längre timeout
-        });
-        ocrData = ocrResponse.data;
-        console.log('OCR Space response:', ocrData);
-      } catch (ocrErr: any) {
-        console.error('OCR Space fel:', ocrErr.message);
-        results.push({ error: `OCR fel: ${ocrErr.message}`, file: file.name });
-        continue;
-      }
+      const ocrResponse = await axios.post('https://api.ocr.space/parse/image', ocrForm, {
+        headers: ocrForm.getHeaders(),
+        timeout: 90000,
+      });
+
+      const ocrData = ocrResponse.data;
 
       if (ocrData.IsErroredOnProcessing) {
         results.push({ error: ocrData.ErrorMessage?.join(' ') || 'OCR misslyckades', file: file.name });
@@ -54,13 +45,14 @@ export async function POST(request: Request) {
       }
 
       const fullText = ocrData.ParsedResults?.map((r: any) => r.ParsedText).join('\n') || '';
+
       if (!fullText.trim()) {
-        results.push({ error: 'Ingen text extraherad från filen', file: file.name });
+        results.push({ error: 'Ingen text extraherad', file: file.name });
         continue;
       }
 
-      // Groq parsing
-      let parsed = {};
+      // Groq Llama 3.3 70B Versatile för smart parsing
+      let parsed: any = {}; // Typ 'any' för att undvika TS-fel på dynamiska fält
       try {
         const completion = await groq.chat.completions.create({
           messages: [
@@ -74,21 +66,29 @@ export async function POST(request: Request) {
           max_tokens: 1024,
         });
         parsed = JSON.parse(completion.choices[0]?.message?.content || '{}');
-        console.log('Groq parsed:', parsed);
-      } catch (groqErr: any) {
-        console.error('Groq fel:', groqErr.message);
-        parsed = { error: `Groq fel: ${groqErr.message}` };
+      } catch (e: any) {
+        parsed = { error: 'JSON-parse misslyckades', raw: completion.choices[0]?.message?.content };
       }
 
-      // Storage + DB (oförändrad)
+      // Storage upload
       const fileName = `${parsed.invoice_number || Date.now()}-${file.name.replace(/\s/g, '_')}`;
-      const { error: uploadError } = await supabase.storage.from('invoices').upload(fileName, buffer, { contentType: file.type || 'application/pdf', upsert: true });
+      const { error: uploadError } = await supabase.storage
+        .from('invoices')
+        .upload(fileName, buffer, { contentType: file.type || 'application/pdf', upsert: true });
 
-      if (uploadError) parsed.upload_error = uploadError.message;
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        parsed.upload_error = uploadError.message;
+        parsed.pdf_url = null;
+      } else {
+        const { data: signedUrlData } = await supabase.storage
+          .from('invoices')
+          .createSignedUrl(fileName, 60 * 60);
 
-      const { data: signedUrlData } = await supabase.storage.from('invoices').createSignedUrl(fileName, 60 * 60);
-      parsed.pdf_url = signedUrlData?.signedUrl || null;
+        parsed.pdf_url = signedUrlData?.signedUrl || null;
+      }
 
+      // DB upsert
       const { error: dbError } = await supabase.from('invoices').upsert({
         invoice_number: parsed.invoice_number,
         amount: parsed.total_amount,
