@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Progress } from '@/components/ui/progress';
+import { Progress } Progress } from '@/components/ui/progress';
 import { useDropzone } from 'react-dropzone';
 
 export default function InvoicesPage() {
@@ -141,7 +141,7 @@ export default function InvoicesPage() {
           <TableBody>
             {filteredInvoices.length === 0 ? (
               <TableRow>
-                <td colSpan={8} className="p-4 align-middle text-center text-gray-500 h-32">
+                <td colSpan={8} className="h-32 text-center text-gray-500 py-8">
                   Inga fakturor matchar sökningen.
                 </td>
               </TableRow>
