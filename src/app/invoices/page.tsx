@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
-import { createClient } from '@supabase/supabase-js';
 import { Invoice } from '@/types/invoice';
 import { Upload, Search, Download, Trash2, Info, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -12,61 +11,50 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress';
 import { useDropzone } from 'react-dropzone';
 
-// Supabase client (frontend – använd anon key)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
-
-// Mock-data som fallback
-const mockInvoices: Invoice[] = [ /* samma som tidigare – behåll dina befintliga */ ];
-
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Fetch fakturor från Supabase (eller mock)
+  // Mock som fallback
+  const mockInvoices: Invoice[] = [
+    // Dina befintliga mock-fakturor här (behåll dem)
+    {
+      id: '1',
+      invoice_number: 'INV-2025-001',
+      supplier: 'Leverantör AB',
+      amount: 125000,
+      due_date: '2026-03-15',
+      total_amount: 125000,
+      vat: 25000,
+      ocr_confidence: 98.5,
+      file_url: '/mock/inv1.pdf',
+      created_at: '2026-02-01T10:00:00Z',
+      status: 'paid',
+      payout_date: '2026-02-02T14:30:00Z',
+      payout_amount: 123750,
+    },
+    // ... resten av dina mock-fakturor
+  ];
+
   const loadInvoices = async () => {
-    setLoading(true);
-    setError(null);
-    if (supabase) {
-      const { data, error } = await supabase
-        .from('invoices')
-        .select('*')
-        .order('created_at', { ascending: false });
-      if (error) {
-        setError('Kunde inte hämta fakturor från Supabase');
-        setInvoices(mockInvoices);
-      } else {
-        // Sätt pending om status saknas (nya fakturor)
-        const processed = (data || []).map((inv: any) => ({
-          ...inv,
-          status: inv.status || 'pending',
-        }));
-        setInvoices(processed);
-      }
-    } else {
-      setInvoices(mockInvoices);
-    }
-    setLoading(false);
+    // Här kan du lägga till riktig Supabase-fetch senare
+    setInvoices(mockInvoices); // Temporärt mock – ersätt med Supabase när redo
   };
 
   useEffect(() => {
     loadInvoices();
   }, []);
 
-  // Uppladdning + OCR + spara
   const onDrop = async (acceptedFiles: File[]) => {
-    if (!supabase) {
-      alert('Supabase inte konfigurerat – använder mock');
+    if (acceptedFiles.length === 0) {
+      setMessage({ type: 'error', text: 'Inga giltiga filer valda (endast PDF/bilder)' });
       return;
     }
-    if (acceptedFiles.length === 0) return;
 
     setUploading(true);
-    setError(null);
+    setMessage(null);
 
     const formData = new FormData();
     acceptedFiles.forEach(file => formData.append('files', file));
@@ -76,13 +64,33 @@ export default function InvoicesPage() {
         method: 'POST',
         body: formData,
       });
-      const result = await res.json();
-      if (!res.ok) throw new Error(result.error || 'Uppladdning misslyckades');
 
-      // Refetch för att få nya fakturor (med pending status)
-      await loadInvoices();
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || `Fel ${res.status}: Uppladdning misslyckades`);
+      }
+
+      setMessage({ type: 'success', text: `Uppladdat ${acceptedFiles.length} faktura(r)! Väntar på godkännande.` });
+      
+      // Lägg till ny faktura som pending (simulerar Supabase-response)
+      const newInvoices = acceptedFiles.map((file, index) => ({
+        id: `new-${Date.now()}-${index}`,
+        invoice_number: result.invoices?.[index]?.invoice_number || 'Okänt nummer',
+        supplier: result.invoices?.[index]?.supplier || 'Okänd leverantör',
+        amount: result.invoices?.[index]?.total_amount || 0,
+        due_date: result.invoices?.[index]?.due_date || new Date().toISOString(),
+        total_amount: result.invoices?.[index]?.total_amount || 0,
+        vat: result.invoices?.[index]?.vat || 0,
+        ocr_confidence: result.invoices?.[index]?.ocr_confidence || 0,
+        file_url: result.signed_urls?.[index] || '#',
+        created_at: new Date().toISOString(),
+        status: 'pending' as const,
+      }));
+
+      setInvoices(prev => [...newInvoices, ...prev]);
     } catch (err: any) {
-      setError(err.message || 'Fel vid uppladdning');
+      setMessage({ type: 'error', text: err.message || 'Okänt fel vid uppladdning' });
     } finally {
       setUploading(false);
     }
@@ -90,7 +98,7 @@ export default function InvoicesPage() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': [], 'image/*': [] },
+    accept: { 'application/pdf': ['.pdf'], 'image/*': ['.png', '.jpg', '.jpeg'] },
     disabled: uploading,
   });
 
@@ -119,12 +127,22 @@ export default function InvoicesPage() {
     <div className="p-8 max-w-7xl mx-auto">
       <h1 className="text-3xl font-bold mb-8">Fakturahantering</h1>
 
-      {error && <p className="text-red-600 mb-4">{error}</p>}
+      {message && (
+        <div className={`p-4 rounded-md mb-6 ${message.type === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
+          {message.text}
+        </div>
+      )}
 
-      <div {...getRootProps()} className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer mb-8 transition ${uploading ? 'opacity-50' : 'hover:bg-gray-100'}`}>
+      <div {...getRootProps()} className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer mb-8 transition ${uploading ? 'opacity-50 border-gray-400' : 'border-gray-300 hover:bg-gray-100'}`}>
         <input {...getInputProps()} />
         <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-        {uploading ? <p className="text-lg">Bearbetar filer...</p> : isDragActive ? <p className="text-lg">Släpp filerna här...</p> : <p className="text-lg">Dra och släpp PDF-fakturor här, eller klicka för att välja filer</p>}
+        {uploading ? (
+          <p className="text-lg">Bearbetar och parsar fakturor...</p>
+        ) : isDragActive ? (
+          <p className="text-lg">Släpp filerna här...</p>
+        ) : (
+          <p className="text-lg">Dra och släpp PDF-fakturor här, eller klicka för att välja filer</p>
+        )}
       </div>
 
       <div className="flex gap-4 mb-6">
@@ -136,88 +154,73 @@ export default function InvoicesPage() {
         />
       </div>
 
-      {loading ? (
-        <p>Laddar fakturor...</p>
-      ) : (
-        <TooltipProvider>
-          <Table>
-            <TableHeader>
+      <TooltipProvider>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Fakturanummer</TableHead>
+              <TableHead>Leverantör</TableHead>
+              <TableHead>Belopp</TableHead>
+              <TableHead>Förfallodatum</TableHead>
+              <TableHead>
+                <div className="flex items-center gap-2">
+                  Status
+                  <Tooltip>
+                    <TooltipTrigger><Info className="w-4 h-4 text-gray-500" /></TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Pengar utbetalas inom 24 timmar efter godkännande. Vi tar över kreditrisken.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TableHead>
+              <TableHead>Utbetalningsdatum</TableHead>
+              <TableHead>Utbetalt belopp</TableHead>
+              <TableHead>Åtgärder</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredInvoices.length === 0 ? (
               <TableRow>
-                <TableHead>Fakturanummer</TableHead>
-                <TableHead>Leverantör</TableHead>
-                <TableHead>Belopp</TableHead>
-                <TableHead>Förfallodatum</TableHead>
-                <TableHead>
-                  <div className="flex items-center gap-2">
-                    Status
-                    <Tooltip>
-                      <TooltipTrigger><Info className="w-4 h-4 text-gray-500" /></TooltipTrigger>
-                      <TooltipContent className="max-w-xs">
-                        Pengar utbetalas inom 24 timmar efter godkännande. Vi tar över kreditrisken.
-                      </TooltipContent>
-                    </Tooltip>
-                  </div>
-                </TableHead>
-                <TableHead>Utbetalningsdatum</TableHead>
-                <TableHead>Utbetalt belopp</TableHead>
-                <TableHead>Åtgärder</TableHead>
+                <td colSpan={8} className="h-32 text-center text-gray-500 py-8">
+                  Inga fakturor matchar sökningen.
+                </td>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredInvoices.length === 0 ? (
-                <TableRow>
-                  <td colSpan={8} className="h-32 text-center text-gray-500 py-8">
-                    Inga fakturor matchar sökningen.
-                  </td>
-                </TableRow>
-              ) : (
-                filteredInvoices.map((inv) => (
-                  <TableRow key={inv.id}>
-                    <TableCell className="font-medium">{inv.invoice_number || 'Okänt'}</TableCell>
-                    <TableCell>{inv.supplier || 'Okänt'}</TableCell>
-                    <TableCell>{inv.amount ? `${inv.amount.toLocaleString('sv-SE')} kr` : '-'}</TableCell>
-                    <TableCell>{inv.due_date ? format(new Date(inv.due_date), 'yyyy-MM-dd') : '-'}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-2">
-                        {getStatusIcon(inv.status || 'pending')}
-                        <span className="font-medium">{getStatusText(inv.status || 'pending')}</span>
-                        {(inv.status || 'pending') === 'pending' && <Progress value={40} className="w-20 ml-4" />}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      {inv.payout_date ? format(new Date(inv.payout_date), 'yyyy-MM-dd HH:mm') : '-'}
-                    </TableCell>
-                    <TableCell>
-                      {inv.payout_amount ? `${inv.payout_amount.toLocaleString('sv-SE')} kr` : '-'}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex gap-2">
-                        {inv.file_url && (
-                          <Button size="sm" variant="outline" asChild>
-                            <a href={inv.file_url} target="_blank" rel="noopener noreferrer">
-                              <Download className="w-4 h-4" />
-                            </a>
-                          </Button>
-                        )}
-                        <Button size="sm" variant="outline" onClick={async () => {
-                          if (supabase && inv.id) {
-                            await supabase.from('invoices').delete().eq('id', inv.id);
-                            loadInvoices();
-                          } else {
-                            setInvoices(invoices.filter(i => i.id !== inv.id));
-                          }
-                        }}>
-                          <Trash2 className="w-4 h-4" />
+            ) : (
+              filteredInvoices.map((inv) => (
+                <TableRow key={inv.id}>
+                  <TableCell className="font-medium">{inv.invoice_number || 'Okänt'}</TableCell>
+                  <TableCell>{inv.supplier || 'Okänt'}</TableCell>
+                  <TableCell>{inv.amount ? `${inv.amount.toLocaleString('sv-SE')} kr` : '-'}</TableCell>
+                  <TableCell>{inv.due_date ? format(new Date(inv.due_date), 'yyyy-MM-dd') : '-'}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(inv.status || 'pending')}
+                      <span className="font-medium">{getStatusText(inv.status || 'pending')}</span>
+                      {(inv.status || 'pending') === 'pending' && <Progress value={40} className="w-20 ml-4" />}
+                    </div>
+                  </TableCell>
+                  <TableCell>{inv.payout_date ? format(new Date(inv.payout_date), 'yyyy-MM-dd HH:mm') : '-'}</TableCell>
+                  <TableCell>{inv.payout_amount ? `${inv.payout_amount.toLocaleString('sv-SE')} kr` : '-'}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      {inv.file_url && (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={inv.file_url} target="_blank" rel="noopener noreferrer">
+                            <Download className="w-4 h-4" />
+                          </a>
                         </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </TooltipProvider>
-      )}
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => setInvoices(invoices.filter(i => i.id !== inv.id))}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TooltipProvider>
     </div>
   );
 }
