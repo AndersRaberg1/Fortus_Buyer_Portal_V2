@@ -160,7 +160,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip formatter={(value) => `${value.toLocaleString('sv-SE')} kr`} />
+                <Tooltip formatter={(value: number) => value != null ? `${value.toLocaleString('sv-SE')} kr` : '0 kr'} />
                 <Legend />
                 <Line type="monotone" dataKey="paid" stroke="#2563eb" strokeWidth={3} name="Utbetalt (kr)" />
               </LineChart>
