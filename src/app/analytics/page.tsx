@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Progress } Progress } from '@/components/ui/progress';
+import { Progress } from '@/components/ui/progress';
 import { useDropzone } from 'react-dropzone';
 
 export default function InvoicesPage() {
