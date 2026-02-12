@@ -123,7 +123,7 @@ export default function AnalyticsPage() {
             <CardDescription>Pengar ni fått från Fortus</CardDescription>
           </CardHeader>
           <CardContent>
-            <p className="text-4xl font-bold text-green-600">{totalPaid.toLocaleString('sv-SE')} kr</p>
+            <p class="text-4xl font-bold text-green-600">{totalPaid.toLocaleString('sv-SE')} kr</p>
           </CardContent>
         </Card>
 
@@ -160,7 +160,7 @@ export default function AnalyticsPage() {
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="month" />
                 <YAxis />
-                <Tooltip formatter={(value: number) => value != null ? `${value.toLocaleString('sv-SE')} kr` : '0 kr'} />
+                <Tooltip formatter={(value) => (value != null ? `${Number(value).toLocaleString('sv-SE')} kr` : '0 kr')} />
                 <Legend />
                 <Line type="monotone" dataKey="paid" stroke="#2563eb" strokeWidth={3} name="Utbetalt (kr)" />
               </LineChart>
