@@ -5,8 +5,6 @@ import { format, addDays } from 'date-fns';
 import { Invoice } from '@/types/invoice';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Info, Calculator, Calendar, DollarSign } from 'lucide-react';
 
@@ -57,8 +55,10 @@ const mockInvoices: Invoice[] = [
 ];
 
 export default function FortusFlexPage() {
-  const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string>('');
   const [extraDays, setExtraDays] = useState(30);
+
+  const selectedInvoice = mockInvoices.find(inv => inv.id === selectedInvoiceId) || null;
 
   // Avgift: 0.05% per extra dag (exempel – justera efter verklig modell)
   const feeRatePerDay = 0.0005; // 0.05%
@@ -74,7 +74,7 @@ export default function FortusFlexPage() {
           <Tooltip>
             <TooltipTrigger><Info className="w-6 h-6 text-gray-500" /></TooltipTrigger>
             <TooltipContent className="max-w-md">
-              <p>Med Fortus Flex betalar vi din leverantör i tid – du betalar oss senare + en låg avgift. Perfekt för bättre likviditet utan att köpa hela fakturan.</p>
+              <p>Med Fortus Flex betalar vi din leverantör i tid – du betalar oss senare + en låg avgift. Perfekt för bättre likviditet utan att sälja hela fakturan.</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -86,28 +86,33 @@ export default function FortusFlexPage() {
           <CardDescription>Förläng betalningstiden flexibelt – vi hanterar resten</CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Välj faktura */}
+          {/* Välj faktura med native select */}
           <div>
-            <Label htmlFor="invoice">Välj faktura</Label>
-            <Select onValueChange={(value) => setSelectedInvoice(mockInvoices.find(inv => inv.id === value) || null)}>
-              <SelectTrigger id="invoice" className="w-full">
-                <SelectValue placeholder="Välj en faktura..." />
-              </SelectTrigger>
-              <SelectContent>
-                {mockInvoices.map((inv) => (
-                  <SelectItem key={inv.id} value={inv.id}>
-                    {inv.invoice_number} – {inv.supplier} ({inv.amount.toLocaleString('sv-SE')} kr)
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <label htmlFor="invoice" className="block text-sm font-medium text-gray-700 mb-2">
+              Välj faktura
+            </label>
+            <select
+              id="invoice"
+              value={selectedInvoiceId}
+              onChange={(e) => setSelectedInvoiceId(e.target.value)}
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+            >
+              <option value="">Välj en faktura...</option>
+              {mockInvoices.map((inv) => (
+                <option key={inv.id} value={inv.id}>
+                  {inv.invoice_number} – {inv.supplier} ({inv.amount.toLocaleString('sv-SE')} kr)
+                </option>
+              ))}
+            </select>
           </div>
 
           {/* Slider för dagar */}
           {selectedInvoice && (
             <>
               <div>
-                <Label htmlFor="days">Extra dagar: {extraDays}</Label>
+                <label htmlFor="days" className="block text-sm font-medium text-gray-700 mb-2">
+                  Extra dagar: {extraDays}
+                </label>
                 <input
                   type="range"
                   id="days"
@@ -116,7 +121,7 @@ export default function FortusFlexPage() {
                   step="10"
                   value={extraDays}
                   onChange={(e) => setExtraDays(Number(e.target.value))}
-                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer slider-thumb"
+                  className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
                   style={{ background: `linear-gradient(to right, #2563eb 0%, #2563eb ${(extraDays - 30) / 60 * 100}%, #e5e7eb ${(extraDays - 30) / 60 * 100}%, #e5e7eb 100%)` }}
                 />
                 <div className="flex justify-between text-sm text-gray-600 mt-2">
@@ -129,9 +134,9 @@ export default function FortusFlexPage() {
               {/* Resultat */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
                 <Card>
-                  <CardHeader className="flex flex-row items-center gap-2">
+                  <CardHeader className="flex flex-row items-center gap-2 pb-2">
                     <Calendar className="w-6 h-6 text-primary" />
-                    <CardTitle>Nytt förfallodatum</CardTitle>
+                    <CardTitle className="text-lg">Nytt förfallodatum</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-2xl font-bold">
@@ -141,9 +146,9 @@ export default function FortusFlexPage() {
                 </Card>
 
                 <Card>
-                  <CardHeader className="flex flex-row items-center gap-2">
+                  <CardHeader className="flex flex-row items-center gap-2 pb-2">
                     <DollarSign className="w-6 h-6 text-primary" />
-                    <CardTitle>Avgift</CardTitle>
+                    <CardTitle className="text-lg">Avgift</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-2xl font-bold">{fee.toFixed(0)} kr</p>
@@ -152,9 +157,9 @@ export default function FortusFlexPage() {
                 </Card>
 
                 <Card>
-                  <CardHeader className="flex flex-row items-center gap-2">
+                  <CardHeader className="flex flex-row items-center gap-2 pb-2">
                     <Calculator className="w-6 h-6 text-primary" />
-                    <CardTitle>Total kostnad</CardTitle>
+                    <CardTitle className="text-lg">Total kostnad</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <p className="text-2xl font-bold">{totalCost.toLocaleString('sv-SE')} kr</p>
