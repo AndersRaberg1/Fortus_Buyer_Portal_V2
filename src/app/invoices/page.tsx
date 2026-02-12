@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { createClient } from '@supabase/supabase-js';
 import { Invoice } from '@/types/invoice';
 import { Upload, Search, Download, Trash2, Info, Clock, CheckCircle, XCircle } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
@@ -11,45 +12,53 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Progress } from '@/components/ui/progress';
 import { useDropzone } from 'react-dropzone';
 
+// Frontend Supabase client (använd anon key för säkerhet)
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabase = supabaseUrl && supabaseAnonKey ? createClient(supabaseUrl, supabaseAnonKey) : null;
+
 export default function InvoicesPage() {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Mock som fallback
-  const mockInvoices: Invoice[] = [
-    // Dina befintliga mock-fakturor här (behåll dem)
-    {
-      id: '1',
-      invoice_number: 'INV-2025-001',
-      supplier: 'Leverantör AB',
-      amount: 125000,
-      due_date: '2026-03-15',
-      total_amount: 125000,
-      vat: 25000,
-      ocr_confidence: 98.5,
-      file_url: '/mock/inv1.pdf',
-      created_at: '2026-02-01T10:00:00Z',
-      status: 'paid',
-      payout_date: '2026-02-02T14:30:00Z',
-      payout_amount: 123750,
-    },
-    // ... resten av dina mock-fakturor
-  ];
-
+  // Hämta fakturor från Supabase
   const loadInvoices = async () => {
-    // Här kan du lägga till riktig Supabase-fetch senare
-    setInvoices(mockInvoices); // Temporärt mock – ersätt med Supabase när redo
+    if (!supabase) {
+      setMessage({ type: 'error', text: 'Supabase inte konfigurerat' });
+      return;
+    }
+    const { data, error } = await supabase
+      .from('invoices')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setMessage({ type: 'error', text: `Fel vid hämtning: ${error.message}` });
+    } else {
+      // Säkerställ pending för nya
+      const processed = (data || []).map((inv: any) => ({
+        ...inv,
+        status: inv.status || 'pending',
+      }));
+      setInvoices(processed);
+    }
   };
 
   useEffect(() => {
     loadInvoices();
   }, []);
 
+  // Uppladdning
   const onDrop = async (acceptedFiles: File[]) => {
     if (acceptedFiles.length === 0) {
-      setMessage({ type: 'error', text: 'Inga giltiga filer valda (endast PDF/bilder)' });
+      setMessage({ type: 'error', text: 'Välj minst en PDF- eller bildfil' });
+      return;
+    }
+
+    if (!supabase) {
+      setMessage({ type: 'error', text: 'Supabase inte konfigurerat' });
       return;
     }
 
@@ -68,27 +77,13 @@ export default function InvoicesPage() {
       const result = await res.json();
 
       if (!res.ok) {
-        throw new Error(result.error || `Fel ${res.status}: Uppladdning misslyckades`);
+        throw new Error(result.error || 'Uppladdning misslyckades');
       }
 
-      setMessage({ type: 'success', text: `Uppladdat ${acceptedFiles.length} faktura(r)! Väntar på godkännande.` });
-      
-      // Lägg till ny faktura som pending (simulerar Supabase-response)
-      const newInvoices = acceptedFiles.map((file, index) => ({
-        id: `new-${Date.now()}-${index}`,
-        invoice_number: result.invoices?.[index]?.invoice_number || 'Okänt nummer',
-        supplier: result.invoices?.[index]?.supplier || 'Okänd leverantör',
-        amount: result.invoices?.[index]?.total_amount || 0,
-        due_date: result.invoices?.[index]?.due_date || new Date().toISOString(),
-        total_amount: result.invoices?.[index]?.total_amount || 0,
-        vat: result.invoices?.[index]?.vat || 0,
-        ocr_confidence: result.invoices?.[index]?.ocr_confidence || 0,
-        file_url: result.signed_urls?.[index] || '#',
-        created_at: new Date().toISOString(),
-        status: 'pending' as const,
-      }));
+      setMessage({ type: 'success', text: `${acceptedFiles.length} faktura(r) uppladdade och väntar på godkännande!` });
 
-      setInvoices(prev => [...newInvoices, ...prev]);
+      // Refetch för nya fakturor (pending)
+      await loadInvoices();
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message || 'Okänt fel vid uppladdning' });
     } finally {
@@ -98,13 +93,13 @@ export default function InvoicesPage() {
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
-    accept: { 'application/pdf': ['.pdf'], 'image/*': ['.png', '.jpg', '.jpeg'] },
+    accept: { 'application/pdf': ['.pdf'], 'image/*': [] },
     disabled: uploading,
   });
 
   const filteredInvoices = invoices.filter(inv =>
-    inv.invoice_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    inv.supplier?.toLowerCase().includes(searchTerm.toLowerCase())
+    (inv.invoice_number || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (inv.supplier || '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const getStatusIcon = (status: Invoice['status']) => {
@@ -112,6 +107,7 @@ export default function InvoicesPage() {
       case 'paid': return <CheckCircle className="w-5 h-5 text-green-600" />;
       case 'approved': return <Clock className="w-5 h-5 text-yellow-600" />;
       case 'pending': return <XCircle className="w-5 h-5 text-gray-500" />;
+      default: return <XCircle className="w-5 h-5 text-gray-500" />;
     }
   };
 
@@ -120,6 +116,7 @@ export default function InvoicesPage() {
       case 'paid': return 'Utbetald';
       case 'approved': return 'Godkänd – utbetalning inom 24h';
       case 'pending': return 'Väntar på godkännande';
+      default: return 'Väntar på godkännande';
     }
   };
 
@@ -133,16 +130,10 @@ export default function InvoicesPage() {
         </div>
       )}
 
-      <div {...getRootProps()} className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer mb-8 transition ${uploading ? 'opacity-50 border-gray-400' : 'border-gray-300 hover:bg-gray-100'}`}>
+      <div {...getRootProps()} className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer mb-8 transition ${uploading ? 'opacity-50' : 'hover:bg-gray-100'}`}>
         <input {...getInputProps()} />
         <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-        {uploading ? (
-          <p className="text-lg">Bearbetar och parsar fakturor...</p>
-        ) : isDragActive ? (
-          <p className="text-lg">Släpp filerna här...</p>
-        ) : (
-          <p className="text-lg">Dra och släpp PDF-fakturor här, eller klicka för att välja filer</p>
-        )}
+        {uploading ? <p className="text-lg">Bearbetar filer...</p> : isDragActive ? <p className="text-lg">Släpp filerna här...</p> : <p className="text-lg">Dra och släpp PDF-fakturor här, eller klicka för att välja filer</p>}
       </div>
 
       <div className="flex gap-4 mb-6">
@@ -194,9 +185,9 @@ export default function InvoicesPage() {
                   <TableCell>{inv.due_date ? format(new Date(inv.due_date), 'yyyy-MM-dd') : '-'}</TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      {getStatusIcon(inv.status || 'pending')}
-                      <span className="font-medium">{getStatusText(inv.status || 'pending')}</span>
-                      {(inv.status || 'pending') === 'pending' && <Progress value={40} className="w-20 ml-4" />}
+                      {getStatusIcon(inv.status)}
+                      <span className="font-medium">{getStatusText(inv.status)}</span>
+                      {inv.status === 'pending' && <Progress value={40} className="w-20 ml-4" />}
                     </div>
                   </TableCell>
                   <TableCell>{inv.payout_date ? format(new Date(inv.payout_date), 'yyyy-MM-dd HH:mm') : '-'}</TableCell>
