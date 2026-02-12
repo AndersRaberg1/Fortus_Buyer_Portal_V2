@@ -1,168 +1,188 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { format } from 'date-fns';
+import { Invoice } from '@/types/invoice';
+import { Upload, Search, Download, Trash2, Info, Clock, CheckCircle, XCircle } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Progress } from '@/components/ui/progress';
 import { useDropzone } from 'react-dropzone';
-import { createClient } from '@supabase/supabase-js';
-import Link from 'next/link';
-import { Trash2, Search, Upload, Loader2, CheckCircle, AlertCircle } from 'lucide-react';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+export default function InvoicesPage() {
+  const [invoices, setInvoices] = useState<Invoice[]>([
+    // Mock-data med nya fält
+    {
+      id: '1',
+      invoice_number: 'INV-2025-001',
+      supplier: 'Leverantör AB',
+      amount: 125000,
+      due_date: '2026-03-15',
+      total_amount: 125000,
+      vat: 25000,
+      ocr_confidence: 98.5,
+      file_url: '/mock/inv1.pdf',
+      created_at: '2026-02-01T10:00:00Z',
+      status: 'paid',
+      payout_date: '2026-02-02T14:30:00Z',
+      payout_amount: 123750,
+    },
+    {
+      id: '2',
+      invoice_number: 'INV-2025-002',
+      supplier: 'Tjänster Sverige AB',
+      amount: 87500,
+      due_date: '2026-02-28',
+      total_amount: 87500,
+      vat: 17500,
+      ocr_confidence: 96.2,
+      file_url: '/mock/inv2.pdf',
+      created_at: '2026-02-10T09:15:00Z',
+      status: 'approved',
+      payout_amount: 86625,
+    },
+    {
+      id: '3',
+      invoice_number: 'INV-2025-003',
+      supplier: 'Materialbolaget',
+      amount: 56250,
+      due_date: '2026-04-01',
+      total_amount: 56250,
+      vat: 11250,
+      ocr_confidence: 99.1,
+      file_url: '/mock/inv3.pdf',
+      created_at: '2026-02-11T14:20:00Z',
+      status: 'pending',
+    },
+  ]);
 
-export default function Invoices() {
-  const [invoices, setInvoices] = useState<any[]>([]);
-  const [filteredInvoices, setFilteredInvoices] = useState<any[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [uploadStatus, setUploadStatus] = useState<'idle' | 'loading' | 'success' | 'error'>('idle');
-  const [statusMessage, setStatusMessage] = useState('');
 
-  const fetchInvoices = async () => {
-    const { data, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) console.error('Fetch error:', error);
-    else {
-      setInvoices(data || []);
-      setFilteredInvoices(data || []);
-    }
-  };
-
-  useEffect(() => {
-    fetchInvoices();
-  }, []);
-
-  useEffect(() => {
-    const lower = searchTerm.toLowerCase();
-    setFilteredInvoices(
-      invoices.filter(inv =>
-        Object.values(inv || {}).some(value =>
-          value?.toString().toLowerCase().includes(lower)
-        )
-      )
-    );
-  }, [searchTerm, invoices]);
+  const filteredInvoices = invoices.filter(inv =>
+    inv.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    inv.supplier.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   const onDrop = async (acceptedFiles: File[]) => {
-    if (acceptedFiles.length === 0) return;
-
-    setLoading(true);
-    setUploadStatus('loading');
-    setStatusMessage('Bearbetar fil...');
-
-    const file = acceptedFiles[0];
-    const formData = new FormData();
-    formData.append('file', file);
-
-    try {
-      const res = await fetch('/api/extract-pdf', { method: 'POST', body: formData });
-      const result = await res.json();
-
-      if (!res.ok) throw new Error(result.error || 'Upload misslyckades');
-
-      setUploadStatus('success');
-      setStatusMessage('Faktura parsad och sparad!');
-      await fetchInvoices();
-    } catch (err: any) {
-      setUploadStatus('error');
-      setStatusMessage(`Fel: ${err.message}`);
-      console.error('Upload fel:', err);
-    } finally {
-      setLoading(false);
-      setTimeout(() => setUploadStatus('idle'), 5000);
-    }
-  };
-
-  const deleteInvoice = async (inv: any) => {
-    if (!confirm('Radera fakturan permanent?')) return;
-
-    if (inv.pdf_url) {
-      const fileName = inv.pdf_url.split('/').pop();
-      await supabase.storage.from('invoices').remove([fileName]);
-    }
-
-    const { error } = await supabase.from('invoices').delete().eq('id', inv.id);
-    if (error) console.error('Delete error:', error);
-    else await fetchInvoices();
+    // Här kopplar du senare till er /api/extract-pdf
+    console.log('Uppladdade filer:', acceptedFiles);
+    // TODO: Lägg till fetch till API-routen och uppdatera invoices-state
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'application/pdf': [], 'image/*': [] },
-    maxFiles: 1,
   });
 
+  const getStatusIcon = (status: Invoice['status']) => {
+    switch (status) {
+      case 'paid': return <CheckCircle className="w-5 h-5 text-green-600" />;
+      case 'approved': return <Clock className="w-5 h-5 text-yellow-600" />;
+      case 'pending': return <XCircle className="w-5 h-5 text-gray-500" />;
+    }
+  };
+
+  const getStatusText = (status: Invoice['status']) => {
+    switch (status) {
+      case 'paid': return 'Utbetald';
+      case 'approved': return 'Godkänd – utbetalning inom 24h';
+      case 'pending': return 'Väntar på godkännande';
+    }
+  };
+
   return (
-    <div className="max-w-6xl mx-auto p-4">
-      <h1 className="text-4xl font-bold mb-8">Fakturor</h1>
+    <div className="p-8 max-w-7xl mx-auto">
+      <h1 className="text-3xl font-bold mb-8">Fakturahantering</h1>
 
-      {/* Upload */}
-      <section className="mb-12">
-        <div
-          {...getRootProps()}
-          className={`border-4 border-dashed rounded-xl p-16 text-center cursor-pointer transition ${isDragActive ? 'border-blue-500 bg-blue-50' : 'border-gray-300'}`}
-        >
-          <input {...getInputProps()} />
-          <Upload className="w-16 h-16 mx-auto mb-4" />
-          <p className="text-xl">{isDragActive ? 'Släpp filen' : 'Dra och släpp PDF/bild eller klicka'}</p>
-          {loading && <Loader2 className="w-8 h-8 mx-auto mt-4 animate-spin" />}
-          {uploadStatus === 'success' && <CheckCircle className="w-8 h-8 mx-auto mt-4 text-green-600" />}
-          {uploadStatus === 'error' && <AlertCircle className="w-8 h-8 mx-auto mt-4 text-red-600" />}
-          {statusMessage && <p className="mt-4 text-lg">{statusMessage}</p>}
-        </div>
-      </section>
+      {/* Dropzone */}
+      <div {...getRootProps()} className="border-2 border-dashed border-gray-300 rounded-lg p-12 text-center cursor-pointer mb-8 bg-gray-50 hover:bg-gray-100 transition">
+        <input {...getInputProps()} />
+        <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+        {isDragActive ? <p className="text-lg">Släpp filerna här...</p> : <p className="text-lg">Dra och släpp PDF-fakturor här, eller klicka för att välja filer</p>}
+      </div>
 
-      {/* Sök + lista */}
-      <section>
-        <div className="relative mb-8">
-          <Search className="absolute left-4 top-3 w-6 h-6 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Sök fakturor..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-4 py-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
+      {/* Sökfält */}
+      <div className="flex gap-4 mb-6">
+        <Input
+          placeholder="Sök efter fakturanummer eller leverantör..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="max-w-sm"
+        />
+      </div>
 
-        {filteredInvoices.length === 0 ? (
-          <p className="text-center text-gray-500 py-16">Inga fakturor hittades.</p>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {filteredInvoices.map((inv) => (
-              <div key={inv.id} className="bg-white rounded-lg shadow-lg p-6 relative">
-                <button onClick={() => deleteInvoice(inv)} className="absolute top-4 right-4 text-red-600">
-                  <Trash2 className="w-6 h-6" />
-                </button>
-                <div className="space-y-3 text-lg">
-                  <p className="text-3xl font-bold text-blue-600">{inv.amount || 'Ej hittat'}</p>
-                  <p><strong>Förfallodatum:</strong> {inv.due_date || 'Ej hittat'}</p>
-                  <p><strong>Fakturadatum:</strong> {inv.invoice_date || 'Ej hittat'}</p>
-                  <p><strong>Leverantör:</strong> {inv.supplier || 'Ej hittat'}</p>
-                  <p><strong>Kundnummer:</strong> {inv.customer_number || 'Ej hittat'}</p>
-                  <p><strong>Fakturanummer:</strong> {inv.invoice_number || 'Ej hittat'}</p>
-                  <p><strong>OCR:</strong> {inv.ocr_number || 'Ej hittat'}</p>
-                  <p><strong>Bankgiro:</strong> {inv.bankgiro || 'Ej hittat'}</p>
-                  <p><strong>Momsbelopp:</strong> {inv.vat_amount || 'Ej hittat'}</p>
-                  <p><strong>Moms%:</strong> {inv.vat_percentage || 'Ej hittat'}</p>
+      {/* Tabell */}
+      <TooltipProvider>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Fakturanummer</TableHead>
+              <TableHead>Leverantör</TableHead>
+              <TableHead>Belopp</TableHead>
+              <TableHead>Förfallodatum</TableHead>
+              <TableHead>
+                <div className="flex items-center gap-2">
+                  Status
+                  <Tooltip>
+                    <TooltipTrigger><Info className="w-4 h-4 text-gray-500" /></TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Pengar utbetalas inom 24 timmar efter godkännande. Vi tar över kreditrisken.
+                    </TooltipContent>
+                  </Tooltip>
                 </div>
-                <div className="mt-6 flex gap-4">
-                  <a href={inv.pdf_url} target="_blank" rel="noopener noreferrer" className="flex-1 text-center bg-blue-600 text-white py-3 rounded-lg">
-                    Öppna PDF
-                  </a>
-                  <Link href="/fortusflex" className="flex-1 text-center bg-green-600 text-white py-3 rounded-lg">
-                    FortusFlex-kalkyl
-                  </Link>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
+              </TableHead>
+              <TableHead>Utbetalningsdatum</TableHead>
+              <TableHead>Utbetalt belopp</TableHead>
+              <TableHead>Åtgärder</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {filteredInvoices.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center text-gray-500">
+                  Inga fakturor matchar sökningen.
+                </TableCell>
+              </TableRow>
+            ) : (
+              filteredInvoices.map((inv) => (
+                <TableRow key={inv.id}>
+                  <TableCell className="font-medium">{inv.invoice_number}</TableCell>
+                  <TableCell>{inv.supplier}</TableCell>
+                  <TableCell>{inv.amount.toLocaleString('sv-SE')} kr</TableCell>
+                  <TableCell>{format(new Date(inv.due_date), 'yyyy-MM-dd')}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      {getStatusIcon(inv.status)}
+                      <span className="font-medium">{getStatusText(inv.status)}</span>
+                      {inv.status === 'pending' && <Progress value={40} className="w-20 ml-4" />}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    {inv.payout_date ? format(new Date(inv.payout_date), 'yyyy-MM-dd HH:mm') : '-'}
+                  </TableCell>
+                  <TableCell>
+                    {inv.payout_amount ? `${inv.payout_amount.toLocaleString('sv-SE')} kr` : '-'}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="outline" asChild>
+                        <a href={inv.file_url} target="_blank" rel="noopener noreferrer">
+                          <Download className="w-4 h-4" />
+                        </a>
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setInvoices(invoices.filter(i => i.id !== inv.id))}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </TooltipProvider>
     </div>
   );
 }
