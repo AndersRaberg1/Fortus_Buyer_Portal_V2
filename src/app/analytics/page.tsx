@@ -123,7 +123,7 @@ export default function AnalyticsPage() {
             <CardDescription>Pengar ni fått från Fortus</CardDescription>
           </CardHeader>
           <CardContent>
-            <p class="text-4xl font-bold text-green-600">{totalPaid.toLocaleString('sv-SE')} kr</p>
+            <p className="text-4xl font-bold text-green-600">{totalPaid.toLocaleString('sv-SE')} kr</p>
           </CardContent>
         </Card>
 
