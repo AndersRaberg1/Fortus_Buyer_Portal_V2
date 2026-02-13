@@ -47,7 +47,7 @@ export default function InvoicesPage() {
 
       setMessage({ type: 'success', text: `${acceptedFiles.length} faktura(r) uppladdade och väntar på godkännande!` });
 
-      // Lägg till ny pending-faktura från resultatet (använder Groq-parsing)
+      // Lägg till ny pending-faktura från Groq-resultatet
       const newInvoices = (result.invoices || []).map((inv: any, index: number) => ({
         id: `uploaded-${Date.now()}-${index}`,
         invoice_number: inv.invoice_number || 'Okänt',
@@ -70,11 +70,10 @@ export default function InvoicesPage() {
     }
   };
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { 'application/pdf': ['.pdf'], 'image/*': [] },
-    noClick: false, // Tillåt klick för filval
-    noKeyboard: true,
+    disabled: uploading,
   });
 
   const filteredInvoices = invoices.filter(inv =>
@@ -86,7 +85,8 @@ export default function InvoicesPage() {
     switch (status) {
       case 'paid': return <CheckCircle className="w-5 h-5 text-green-600" />;
       case 'approved': return <Clock className="w-5 h-5 text-yellow-600" />;
-      case '...pending': return <XCircle className="w-5 h-5 text-gray-500" />;
+      case 'pending': return <XCircle className="w-5 h-5 text-gray-500" />;
+      default: return <XCircle className="w-5 h-5 text-gray-500" />;
     }
   };
 
@@ -95,6 +95,7 @@ export default function InvoicesPage() {
       case 'paid': return 'Utbetald';
       case 'approved': return 'Godkänd – utbetalning inom 24h';
       case 'pending': return 'Väntar på godkännande';
+      default: return 'Väntar på godkännande';
     }
   };
 
@@ -111,13 +112,7 @@ export default function InvoicesPage() {
       <div {...getRootProps()} className={`border-2 border-dashed rounded-lg p-12 text-center cursor-pointer mb-8 transition ${uploading ? 'opacity-50' : 'hover:bg-gray-100'}`}>
         <input {...getInputProps()} />
         <Upload className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-        {uploading ? (
-          <p className="text-lg">Bearbetar och parsar fakturor...</p>
-        ) : isDragActive ? (
-          <p className="text-lg">Släpp filerna här...</p>
-        ) : (
-          <p className="text-lg">Dra och släpp PDF-fakturor här, eller klicka för att välja filer</p>
-        )}
+        {uploading ? <p className="text-lg">Bearbetar och parsar fakturor...</p> : isDragActive ? <p className="text-lg">Släpp filerna här...</p> : <p className="text-lg">Dra och släpp PDF-fakturor här, eller klicka för att välja filer</p>}
       </div>
 
       <div className="flex gap-4 mb-6">
@@ -131,9 +126,27 @@ export default function InvoicesPage() {
 
       <TooltipProvider>
         <Table>
-          {/* Samma header som tidigare */}
           <TableHeader>
-            {/* ... */}
+            <TableRow>
+              <TableHead>Fakturanummer</TableHead>
+              <TableHead>Leverantör</TableHead>
+              <TableHead>Belopp</TableHead>
+              <TableHead>Förfallodatum</TableHead>
+              <TableHead>
+                <div className="flex items-center gap-2">
+                  Status
+                  <Tooltip>
+                    <TooltipTrigger><Info className="w-4 h-4 text-gray-500" /></TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      Pengar utbetalas inom 24 timmar efter godkännande. Vi tar över kreditrisken.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+              </TableHead>
+              <TableHead>Utbetalningsdatum</TableHead>
+              <TableHead>Utbetalt belopp</TableHead>
+              <TableHead>Åtgärder</TableHead>
+            </TableRow>
           </TableHeader>
           <TableBody>
             {filteredInvoices.length === 0 ? (
@@ -145,7 +158,6 @@ export default function InvoicesPage() {
             ) : (
               filteredInvoices.map((inv) => (
                 <TableRow key={inv.id}>
-                  {/* Samma celler som tidigare */}
                   <TableCell className="font-medium">{inv.invoice_number || 'Okänt'}</TableCell>
                   <TableCell>{inv.supplier || 'Okänt'}</TableCell>
                   <TableCell>{inv.amount ? `${inv.amount.toLocaleString('sv-SE')} kr` : '-'}</TableCell>
@@ -157,7 +169,22 @@ export default function InvoicesPage() {
                       {(inv.status || 'pending') === 'pending' && <Progress value={40} className="w-20 ml-4" />}
                     </div>
                   </TableCell>
-                  {/* ... resten av cellerna */}
+                  <TableCell>{inv.payout_date ? format(new Date(inv.payout_date), 'yyyy-MM-dd HH:mm') : '-'}</TableCell>
+                  <TableCell>{inv.payout_amount ? `${inv.payout_amount.toLocaleString('sv-SE')} kr` : '-'}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-2">
+                      {inv.file_url && (
+                        <Button size="sm" variant="outline" asChild>
+                          <a href={inv.file_url} target="_blank" rel="noopener noreferrer">
+                            <Download className="w-4 h-4" />
+                          </a>
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => setInvoices(invoices.filter(i => i.id !== inv.id))}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))
             )}
